@@ -9,12 +9,12 @@
    ```bash
    git clone https://github.com/L1064709321/stars-gateway.git
    cd stars-gateway
-运行项目：cargo run
+2. 运行项目：cargo run
 文件结构
 src/main.rs：项目入口，启动网关服务。
 src/sink/：流量处理模块（如延迟响应、拒绝服务等）。
 README.md：项目说明文档。
-### **改进点说明**  
+## **改进点说明**  
 - **步骤清晰**：用“1. 克隆仓库：”“2. 运行项目：”明确步骤，避免“1. 克隆仓库：bash”的混乱。  
 - **命令完整**：`cargo run` 是 Rust 项目的标准运行命令，补充完整后读者能直接复制执行。  
 - **格式统一**：所有命令都用代码块包裹，符合 Markdown 规范，提升可读性。  
