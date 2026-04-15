@@ -1,107 +1,89 @@
-# STARS Gateway
+```markdown
+# STARS-Gateway: Stateless Traffic Absorption & Resource-Sink
 
-STARS Gateway 是一个使用 Rust 语言开发的高性能、轻量级网关项目。它专注于流量吸收与资源管理，通过延迟响应（Tarpit）等核心机制，为后端服务提供一道坚固的安全屏障。
+[![Rust](https://img.shields.io/badge/Rust-1.75%2B-orange)](https://www.rust-lang.org)
+[![License](https://img.shields.io/badge/License-Apache%202.0-green)](LICENSE)
+[![Stage](https://img.shields.io/badge/Stage-Proof%20of%20Concept-yellow)]()
 
-## 技术栈
+Current Status: Proof-of-Concept
+This repository currently implements a single-node Slowloris-style tarpit engine (STARS-Sink). The decentralized constellation mesh (STARS-Pulse) and eBPF XDP filter (STARS-Filter) are under active design. See RFC.md for the architectural vision.
 
-- **Rust**: 主要开发语言，以其卓越的性能和内存安全性著称。
-- **Tokio**: Rust 的异步运行时，用于构建高并发、非阻塞的网络应用。
-- **HTTP/1.1**: 广泛支持的 Web 网络协议。
+## What is STARS-Gateway?
 
-## 核心特性
+STARS-Gateway is an experimental edge traffic governance framework that replaces traditional WAF "block-on-sight" behavior with asymmetric resource consumption traps. Instead of returning 403 or resetting connections, it accepts suspicious traffic and forces the client to waste resources waiting for a response that never completes.
 
-- **延迟响应（Tarpit）**: 对可疑或恶意的请求进行主动且渐进的延迟，有效消耗攻击者资源，平抑流量峰值，防止暴力破解和恶意扫描[reference:0]。
-- **流量吸收**: 通过延迟响应等策略，平滑瞬时流量洪峰，避免后端服务因过载而不可用。
-- **安全保护**: 作为服务的前置层，对流量进行预检和过滤，防止恶意请求直达核心业务。
-- **高性能**: 基于 Rust 和 Tokio 的架构，确保了在高并发场景下的低资源消耗与高吞吐量。
+### Core Modules (Current & Planned)
 
-## 快速开始
+| Module | Status | Description |
+| :--- | :--- | :--- |
+| STARS-Sink | Implemented | Async tarpit engine. Responds to clients with exponentially delayed 1-byte payloads. Consumes attacker's file descriptors and event loop capacity while using less than 5 percent local CPU. |
+| STARS-Filter | Design | eBPF/XDP in-kernel classifier. Routes suspicious flows to the sink without touching user-space network stack. |
+| STARS-Pulse | Design | SWIM-based gossip protocol for decentralized signature propagation across edge nodes. |
 
-### 环境要求
+## Quick Start (Single Node Tarpit)
 
-- [Rust](https://www.rust-lang.org/tools/install) 1.70 或更高版本
-- Cargo (通常随 Rust 一起安装)
+### Prerequisites
+- Linux kernel 5.4 or newer
+- Rust 1.75 or newer (install via rustup)
 
-### 安装与运行
+### Build and Run
+”“bash
+git clone https://github.com/L1064709321/stars-gateway.git
+cd stars-gateway
 
-1.  **克隆仓库**:
-    ```bash
-    git clone https://github.com/L1064709321/stars-gateway.git
-    cd stars-gateway
-2.  **编译并运行项目**:
-    ```bash
-    cargo run
-   此命令会自动下载所需依赖、编译项目并启动网关服务。默认情况下，服务会监听 127.0.0.1:8080
-   ## 文件结构
+货物建造—放行
 
-项目的主要目录和文件结构如下：
+sudo。/target/release/stars-gateway——mode sink——bind 0.0.0.0:9999
+```
+
+###使用slowhttptest测试
+”“bash
+slowttptest -c 500 -H -g -o报告-i 10 -r 200 -t GET -u http://127.0.0.1:9999
+```
+
+观察到:
+—攻击客户端挂起，最终超时。
+- stars-gateway进程的本地CPU使用率仍然很低（低于5%）。
+—接收端口（ss -ntp | grep 9999）的连接保持ESTABLISHED状态。
+
+项目结构
 
 ```
 stars-gateway/
+├──ebpf/ # XDP滤镜（设计阶段）
+│   ├── include/
+我愿……
+││├──filter_xdp.c
+│Makefile
 ├── src/
-│   ├── main.rs          # 程序入口，负责初始化并启动网关服务
-│   └── sink/            # 核心流量处理模块
-│       ├── mod.rs       # 模块定义和公共接口
-│       ├── tarpit.rs    # 实现延迟响应（Tarpit）逻辑
-│       └── reject.rs    # 实现拒绝服务等策略
-├── Cargo.toml           # Rust 项目清单，包含依赖和元数据
-└── README.md            # 项目说明文档
+│├──sink/ # Tarpit引擎实现
+我的意思是：
+│   │   └── tarpit.rs
+│├──├─rammstein（设计阶段）
+mod.rs
+│   └── main.rs
+├──docs/ # RFC和架构注释
+├── Cargo.toml
+└── README.md
 ```
 
-## 配置指南
+# #命名
 
-你可以通过修改 `src/main.rs` 中的配置常量来调整网关行为。
+STARS代表无状态流量吸收和资源吸收。该名称还反映了预期的星座拓扑，其中每个边缘节点充当一个独立的“星”。是的，我是星爵。
 
-### 基本配置示例
+# #路线图
 
-在 `src/main.rs` 中，你可以找到并调整如下配置：
+- [x]单节点tarpit引擎（STARS-Sink）
+- [] eBPF XDP流量分类器（STARS-Filter）
+- [] SWIM八卦会员（STARS-Pulse）
+-[]基于crdt的签名传播
+- [] Kubernetes DaemonSet部署清单
 
-```rust
-// 监听地址和端口
-let addr = "127.0.0.1:8080";
+# #贡献
 
-// Tarpit 基础延迟时间（单位：毫秒）
-let tarpit_base_delay_ms = 1000;
-```
+该项目处于早期概念验证阶段。Bug报告，想法和讨论欢迎通过问题。请注意，大型特性发布可能会推迟到核心架构稳定之后。
 
-### 高级配置（计划中）
+# #许可证
 
-未来版本计划支持通过 `config.toml` 文件进行更细粒度的配置，包括：
-- **路由规则**: 定义哪些请求路径或方法需要被延迟或拒绝。
-- **延迟策略**: 自定义延迟算法和参数，如基础延迟、增长因子和最大延迟上限。
-- **日志级别**: 控制日志输出的详细程度。
-
-## 核心概念
-
-### Tarpit 的工作原理
-
-Tarpit（延迟响应）是一种主动防御策略。当网关检测到来自某个 IP 地址的可疑行为时（例如高频访问、请求敏感路径），会执行以下步骤：
-
-1.  **记录状态**: 为来源 IP 地址分配一个“威胁等级”。
-2.  **计算延迟**: 根据威胁等级，计算出一个渐进的响应延迟时间。常见算法如 `基础延迟 * 1.5^(威胁等级-1)`，并设置一个最大延迟上限（如30秒）。
-3.  **异步等待**: 利用 Tokio 的 `tokio::time::sleep` 进行异步休眠，在此期间工作线程不会被阻塞，可继续处理其他连接。
-4.  **发送响应**: 延迟结束后，再向客户端发送响应。
-
-这种方法旨在：
-- **消耗攻击者资源**: 迫使其花费大量时间等待响应，增加攻击成本。
-- **保护后端服务**: 避免后端服务被海量恶意请求瞬间淹没。
-- **避免误伤**: 对于偶尔触发规则的正常用户，影响相对较小。
-
-## 贡献
-
-我们欢迎任何形式的贡献！如果你发现了 Bug 或有新的想法，请按以下步骤操作：
-
-1.  Fork 本仓库。
-2.  创建你的特性分支 (`git checkout -b feature/amazing-feature`)。
-3.  提交你的更改 (`git commit -m 'Add some amazing feature'`)。
-4.  推送到分支 (`git push origin feature/amazing-feature`)。
-5.  创建一个 Pull Request。
-
-## 许可证
-
-本项目采用 [MIT](LICENSE) 许可证。你可以自由地使用、修改和分发本项目的代码。
-
-## 致谢
-
-感谢所有为 Rust 生态做出贡献的开发者，特别是 Tokio 团队，是他们让用 Rust 构建高性能网络服务变得如此简单。
+Apache 2.0。看到许可证。
 ```
