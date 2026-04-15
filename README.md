@@ -68,7 +68,7 @@ stars-gateway/
 
 # Naming
 
-STARS stands for Stateless Traffic Absorption & Resource-Sink. The name also reflects the intended constellation topology where each edge node acts as an independent "star". Yes, I'm the Star Lord.
+STARS stands for Stateless Traffic Absorption & Resource-Sink. The name also reflects the intended constellation topology where each edge node acts as an independent "star". Yes, I'm the Lord of the Star.
 
 # Roadmap
 
