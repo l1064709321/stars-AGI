@@ -91,9 +91,9 @@ slowhttptest -c 500 -H -g -o report -i 10 -r 200 -t GET -u http://127.0.0.1:9999
 
 # 观察要点：
 
-· 攻击方客户端挂起，最终超时。
-· 防御方 stars-gateway 进程 CPU 占用持续低于 5%。
-· 陷阱端口上连接保持 ESTABLISHED 状态 (ss -ntp | grep 9999)。
+*   攻击方客户端挂起，最终超时。
+*   防御方 stars-gateway 进程 CPU 占用持续低于 5%。
+*   陷阱端口上连接保持 ESTABLISHED 状态 (ss -ntp | grep 9999)。
 
 # 项目结构
 ```
