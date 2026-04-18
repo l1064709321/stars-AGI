@@ -450,7 +450,7 @@ class NginxConfigGenerator:
 
     def generate_nginx_conf(self) -> str:
         cf_trust_ips = "\n".join(f"    set_real_ip_from {c};" for c in self.cf.CF_IP_RANGES)
-        return f'''# STARS-Gateway v3.2 - Nginx Configuration
+        return f'''# STARS-Gateway v0.1.2 - Nginx Configuration
 # Auto-generated: {datetime.now().isoformat()}
 
 load_module modules/ngx_http_modsecurity_module.so;
@@ -597,7 +597,7 @@ http {{
 
     def generate_modsec_main_conf(self) -> str:
         return f'''# ModSecurity Main Configuration
-# STARS-Gateway v3.2
+# STARS-Gateway v0.1.2
 
 SecRuleEngine On
 SecRequestBodyAccess On
@@ -858,4 +858,463 @@ class StatusAPIServer:
         try:
             client.settimeout(5.0)
             request = client.recv(4096).decode('utf-8', errors='ignore')
-            if '/status' in req
+            if '/status' in request:
+                body = json.dumps(self.gateway.get_status(), indent=2, default=str)
+                ct = "application/json"
+            elif '/attacks' in request:
+                body = json.dumps(self.gateway.get_recent_attacks(20), indent=2, default=str)
+                ct = "application/json"
+            elif '/report' in request:
+                body = self.gateway.generate_report()
+                ct = "text/plain"
+            elif '/star' in request:
+                body = json.dumps({
+                    'current_star': self.gateway.current_star,
+                    'star_history': self.gateway.star_history[-10:],
+                }, indent=2, ensure_ascii=False, default=str)
+                ct = "application/json; charset=utf-8"
+            else:
+                body = json.dumps({
+                    'endpoints': ['/status', '/attacks', '/report', '/star'],
+                    'version': self.gateway.version,
+                }, indent=2)
+                ct = "application/json"
+            response = (
+                f"HTTP/1.1 200 OK\r\n"
+                f"Content-Type: {ct}\r\n"
+                f"Content-Length: {len(body.encode('utf-8'))}\r\n"
+                f"Connection: close\r\n"
+                f"\r\n{body}"
+            )
+            client.sendall(response.encode('utf-8'))
+        except Exception:
+            pass
+        finally:
+            client.close()
+
+
+# ==================== 主网关类 ====================
+
+class STARGateway:
+
+    def __init__(self, config: dict = None):
+        config = config or {}
+        self.version = "0.1.2"
+        self._start_time = datetime.now()
+        self.is_emperor_mode = config.get('emperor_mode', False)
+
+        self.cf_config = CloudflareConfig(
+            api_token=config.get('cf_api_token', ''),
+            zone_id=config.get('cf_zone_id', ''),
+            email=config.get('cf_email', ''),
+        )
+
+        # 自动检测 AidLux 路径
+        if os.path.exists('/aidlux'):
+            base = '/aidlux/stars_gateway'
+            nginx_conf = f'{base}/nginx'
+            modsec_conf = f'{base}/modsecurity'
+            crs_conf = f'{base}/modsecurity/crs'
+        else:
+            nginx_conf = config.get('nginx_config_dir', '/etc/nginx')
+            modsec_conf = config.get('modsec_dir', '/etc/nginx/modsecurity')
+            crs_conf = config.get('crs_dir', '/etc/nginx/modsecurity/crs')
+
+        self.nginx_config = NginxConfig(
+            server_name=config.get('server_name', 'example.com'),
+            upstream_host=config.get('upstream_host', '127.0.0.1'),
+            upstream_port=config.get('upstream_port', 3000),
+            config_dir=nginx_conf,
+            modsec_dir=modsec_conf,
+            crs_dir=crs_conf,
+        )
+
+        self.cf_manager = CloudflareManager(self.cf_config)
+        self.nginx_gen = NginxConfigGenerator(self.nginx_config, self.cf_manager)
+        self.modsec_parser = ModSecurityLogParser()
+        self.threat_intel = ThreatIntelligence()
+        self.status_api = StatusAPIServer(self)
+
+        self.current_star: dict = {}
+        self.star_history: List[dict] = []
+        self._ip_profiles: Dict[str, IPProfile] = {}
+        self._attack_events: List[AttackEvent] = []
+        self._blocked_ips: Set[str] = set()
+        self._lock = threading.Lock()
+
+        self._metrics = {
+            'total_attacks': 0,
+            'attacks_blocked': 0,
+            'cf_blocks': 0,
+            'attacks_by_type': defaultdict(int),
+        }
+
+        self._stop_events: List[threading.Event] = []
+        self._running = False
+
+        self._setup_logging()
+        self.logger = logging.getLogger('STARS')
+
+    def _setup_logging(self):
+        log_dir = Path('logs')
+        log_dir.mkdir(exist_ok=True)
+        logging.basicConfig(
+            level=logging.INFO,
+            format='%(asctime)s [%(name)s] [%(levelname)s] %(message)s',
+            handlers=[
+                logging.FileHandler(log_dir / 'stars_gateway.log'),
+                logging.StreamHandler(),
+            ]
+        )
+
+    # ==================== 星宿选择 ====================
+
+    def _select_star(self) -> str:
+        if self.is_emperor_mode:
+            star = StarSystem.get_emperor_star()
+            self.logger.info("紫微降临")
+        else:
+            star = StarSystem.get_random_star()
+
+        self.current_star = {
+            'name': star,
+            'selected_at': datetime.now().isoformat(),
+            'session_id': hashlib.sha256(
+                f"{star}:{datetime.now().isoformat()}".encode()
+            ).hexdigest()[:12],
+        }
+        self.star_history.append(self.current_star)
+        if len(self.star_history) > 100:
+            self.star_history = self.star_history[-50:]
+        return star
+
+    def _display_startup_banner(self):
+        star = self._select_star()
+        star_display = StarSystem.get_startup_display(star)
+        os.system('cls' if platform.system() == 'Windows' else 'clear')
+
+        mode = "帝星专属" if star == "紫微" else "周天星斗"
+        total_stars = StarSystem.get_star_count()
+
+        print(star_display)
+        print(f"""
+    ┌──────────────────────────────────────────────┐
+    │  STARS-Gateway v{self.version:<30}│
+    │  模式: {mode:<39}│
+    │  当值: {star:<39}│
+    │  周天: {total_stars} 颗星{' ' * (32 - len(str(total_stars)))}│
+    │  会话: {self.current_star['session_id']:<39}│
+    │  时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S'):<39}│
+    ├──────────────────────────────────────────────┤
+    │  平台: {platform.system():<39}│
+    │  Cloudflare: {'已配置' if self.cf_config.is_configured else '未配置':<34}│
+    │  威胁情报: abuse.ch + Emerging Threats       │
+    │  检测引擎: ModSecurity + OWASP CRS           │
+    │  状态接口: http://127.0.0.1:9090             │
+    └──────────────────────────────────────────────┘
+        """)
+        self.logger.info(f"当值星宿: {star} | 周天星斗: {total_stars} 颗")
+
+    # ==================== IP 管理 ====================
+
+    def get_or_create_profile(self, ip: str) -> IPProfile:
+        with self._lock:
+            if ip not in self._ip_profiles:
+                self._ip_profiles[ip] = IPProfile(ip=ip)
+            profile = self._ip_profiles[ip]
+            profile.last_seen = datetime.now()
+            profile.request_count += 1
+            return profile
+
+    def process_attack(self, ip: str, attack_type: AttackType,
+                       detail: str, source: str = "local") -> BlockAction:
+        profile = self.get_or_create_profile(ip)
+        with self._lock:
+            profile.violations += 1
+            profile.attack_types.append(attack_type)
+            profile.reputation = max(0, profile.reputation - 20)
+            self._metrics['total_attacks'] += 1
+            self._metrics['attacks_by_type'][attack_type.value] += 1
+
+        action = self._determine_action(profile, attack_type)
+
+        event = AttackEvent(
+            timestamp=datetime.now(), ip=ip, attack_type=attack_type,
+            detail=detail[:200], source=source,
+            action_taken=action.value, blocked=(action == BlockAction.BLOCK),
+        )
+
+        if action == BlockAction.BLOCK:
+            self._block_ip(ip, profile, source)
+            with self._lock:
+                self._metrics['attacks_blocked'] += 1
+        elif action == BlockAction.CHALLENGE and self.cf_config.is_configured:
+            self.cf_manager.challenge_ip(ip, f"STARS: {attack_type.value}")
+
+        with self._lock:
+            self._attack_events.append(event)
+            if len(self._attack_events) > 10000:
+                self._attack_events = self._attack_events[-5000:]
+
+        star_name = self.current_star.get('name', '?')
+        self.logger.warning(
+            f"[{star_name}] ATTACK IP={ip} Type={attack_type.value} "
+            f"Rep={profile.reputation} Action={action.value}"
+        )
+        return action
+
+    def _determine_action(self, profile: IPProfile,
+                          attack_type: AttackType) -> BlockAction:
+        critical = {AttackType.SQL_INJECTION, AttackType.COMMAND_INJECTION, AttackType.SSRF}
+        if attack_type in critical and profile.violations >= 2:
+            return BlockAction.BLOCK
+        if profile.reputation < 20:
+            return BlockAction.BLOCK
+        if profile.violations == 1:
+            return BlockAction.CHALLENGE
+        if self.threat_intel.is_known_bad(profile.ip):
+            return BlockAction.BLOCK
+        if profile.reputation >= 50:
+            return BlockAction.LOG_ONLY
+        return BlockAction.BLOCK
+
+    def _block_ip(self, ip: str, profile: IPProfile, source: str):
+        with self._lock:
+            self._blocked_ips.add(ip)
+            profile.blocked_until = datetime.now() + timedelta(hours=24)
+        if self.cf_config.is_configured:
+            if self.cf_manager.block_ip(ip, f"STARS auto: {source}"):
+                with self._lock:
+                    self._metrics['cf_blocks'] += 1
+        self._update_nginx_rules()
+        self.logger.warning(f"[{self.current_star.get('name', '?')}] BLOCKED {ip}")
+
+    def _update_nginx_rules(self):
+        try:
+            with self._lock:
+                blocked = set(self._blocked_ips)
+                threat_ips = set(self.threat_intel.known_bad_ips)
+            self.nginx_gen.write_threat_intel_ips(threat_ips)
+            self.nginx_gen.write_configs(blocked)
+            threading.Thread(target=self.nginx_gen.reload_nginx, daemon=True).start()
+        except Exception as e:
+            self.logger.error(f"Failed to update Nginx rules: {e}")
+
+    # ==================== 后台任务 ====================
+
+    def _start_background_task(self, target, name: str, *args):
+        stop_event = threading.Event()
+        self._stop_events.append(stop_event)
+
+        def wrapper():
+            while not stop_event.is_set():
+                try:
+                    target(*args, stop_event)
+                except TypeError:
+                    target(*args)
+                except Exception as e:
+                    self.logger.error(f"Task {name} error: {e}")
+                if not stop_event.is_set():
+                    time.sleep(1)
+
+        thread = threading.Thread(target=wrapper, daemon=True, name=name)
+        thread.start()
+
+    def _threat_intel_loop(self, stop_event: threading.Event):
+        while not stop_event.is_set():
+            self.threat_intel.update_all()
+            stop_event.wait(3600)
+
+    def _modsec_monitor_loop(self, stop_event: threading.Event):
+        def on_attack(parsed):
+            self.process_attack(
+                parsed.get('ip', 'unknown'),
+                parsed.get('attack_type', AttackType.UNKNOWN),
+                parsed.get('message', ''),
+                source="modsecurity",
+            )
+        self.modsec_parser.tail_log("/var/log/nginx/modsec_audit.log", on_attack, stop_event)
+
+    def _status_reporter_loop(self, stop_event: threading.Event):
+        while not stop_event.is_set():
+            status = self.get_status()
+            star = self.current_star.get('name', '?')
+            self.logger.info(
+                f"[{star}] Attacks: {status['metrics']['total_attacks']} "
+                f"Blocked: {status['metrics']['attacks_blocked']} "
+                f"Tracked: {status['metrics']['tracked_ips']}"
+            )
+            stop_event.wait(60)
+
+    def _ip_cleanup_loop(self, stop_event: threading.Event):
+        while not stop_event.is_set():
+            stop_event.wait(300)
+            if stop_event.is_set():
+                break
+            now = datetime.now()
+            with self._lock:
+                expired = [
+                    ip for ip, p in self._ip_profiles.items()
+                    if p.blocked_until and p.blocked_until < now
+                    and (now - p.last_seen) > timedelta(hours=1)
+                ]
+                for ip in expired:
+                    del self._ip_profiles[ip]
+                if len(self._ip_profiles) > 50000:
+                    sorted_ips = sorted(
+                        self._ip_profiles.items(), key=lambda x: x[1].last_seen
+                    )
+                    for ip, _ in sorted_ips[:10000]:
+                        del self._ip_profiles[ip]
+
+    # ==================== 状态与报告 ====================
+
+    def get_status(self) -> dict:
+        with self._lock:
+            return {
+                'version': self.version,
+                'uptime': str(datetime.now() - self._start_time).split('.')[0],
+                'current_star': self.current_star,
+                'metrics': {
+                    'total_attacks': self._metrics['total_attacks'],
+                    'attacks_blocked': self._metrics['attacks_blocked'],
+                    'cf_blocks': self._metrics['cf_blocks'],
+                    'tracked_ips': len(self._ip_profiles),
+                    'blocked_ips': len(self._blocked_ips),
+                    'attacks_by_type': dict(self._metrics['attacks_by_type']),
+                },
+                'threat_intel': {
+                    'last_update': (
+                        self.threat_intel.last_update.isoformat()
+                        if self.threat_intel.last_update else None
+                    ),
+                    'known_bad_ips': len(self.threat_intel.known_bad_ips),
+                },
+                'cloudflare': {'configured': self.cf_config.is_configured},
+                'system': {
+                    'cpu': psutil.cpu_percent(),
+                    'memory': psutil.virtual_memory().percent,
+                },
+            }
+
+    def get_recent_attacks(self, limit: int = 50) -> List[dict]:
+        with self._lock:
+            events = self._attack_events[-limit:]
+            return [
+                {
+                    'timestamp': e.timestamp.isoformat(),
+                    'ip': e.ip, 'type': e.attack_type.value,
+                    'detail': e.detail[:100], 'source': e.source,
+                    'action': e.action_taken, 'blocked': e.blocked,
+                }
+                for e in reversed(events)
+            ]
+
+    def generate_report(self) -> str:
+        status = self.get_status()
+        star = self.current_star.get('name', '?')
+        lines = [
+            "=" * 60,
+            f"  STARS-Gateway v{self.version}",
+            f"  当值星宿: {star}",
+            f"  周天星斗: {StarSystem.get_star_count()} 颗",
+            f"  时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+            "=" * 60,
+            "",
+            f"  攻击总数: {status['metrics']['total_attacks']}",
+            f"  已拦截:   {status['metrics']['attacks_blocked']}",
+            f"  CF 封禁:  {status['metrics']['cf_blocks']}",
+            f"  追踪IP:   {status['metrics']['tracked_ips']}",
+            f"  封禁IP:   {status['metrics']['blocked_ips']}",
+            f"  威胁库:   {status['threat_intel']['known_bad_ips']} 条",
+            "",
+            "[攻击分布]",
+        ]
+        for atype, count in status['metrics']['attacks_by_type'].items():
+            lines.append(f"  {atype}: {count}")
+
+        lines.extend(["", "[星宿历史]"])
+        for s in self.star_history[-5:]:
+            lines.append(f"  {s['selected_at'][:19]} - {s['name']}")
+
+        lines.append("=" * 60)
+        return "\n".join(lines)
+
+    # ==================== 启动/停止 ====================
+
+    def initialize(self):
+        self.logger.info(f"STARS-Gateway v{self.version} initializing...")
+        self.threat_intel.update_all()
+        self.nginx_gen.write_configs(set())
+        self.nginx_gen.write_threat_intel_ips(self.threat_intel.known_bad_ips)
+        self.logger.info("Initialization complete")
+
+    def start(self):
+        self._running = True
+        self._display_startup_banner()
+        self.initialize()
+
+        self._start_background_task(self._threat_intel_loop, "ThreatIntel")
+        self._start_background_task(self._modsec_monitor_loop, "ModSecMonitor")
+        self._start_background_task(self._status_reporter_loop, "StatusReporter")
+        self._start_background_task(self._ip_cleanup_loop, "IPCleanup")
+
+        self.status_api.start()
+
+        star_name = self.current_star.get('name', '?')
+        print(f"\n    ★ {star_name} 当值，网关运行中 ★")
+        print(f"    状态: curl http://127.0.0.1:9090/status")
+        print(f"    星宿: curl http://127.0.0.1:9090/star")
+        print(f"    报告: curl http://127.0.0.1:9090/report")
+        print(f"    Ctrl+C 停止\n")
+
+    def stop(self):
+        star_name = self.current_star.get('name', '?')
+        self.logger.info(f"{star_name} 退位，正在关闭...")
+        self._running = False
+        for event in self._stop_events:
+            event.set()
+        self.status_api.stop()
+        time.sleep(1)
+        print(self.generate_report())
+
+    def run(self):
+        self.start()
+        try:
+            while self._running:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            pass
+        finally:
+            self.stop()
+
+
+# ==================== 入口 ====================
+
+if __name__ == "__main__":
+    print("""
+    ╔══════════════════════════════════════════════════╗
+    ║           STARS-Gateway v0.1.2                  ║
+    ║           周天星斗守护系统                       ║
+    ╚══════════════════════════════════════════════════╝
+    """)
+
+    emperor_mode = os.getenv('STARS_EMPEROR', '').lower() in ('true', '1', 'yes')
+
+    gateway = STARGateway({
+        'emperor_mode': emperor_mode,
+        'cf_api_token': os.getenv('CF_API_TOKEN', ''),
+        'cf_zone_id': os.getenv('CF_ZONE_ID', ''),
+        'server_name': os.getenv('SERVER_NAME', 'example.com'),
+        'upstream_host': os.getenv('UPSTREAM_HOST', '127.0.0.1'),
+        'upstream_port': int(os.getenv('UPSTREAM_PORT', '3000')),
+    })
+
+    def signal_handler(sig, frame):
+        gateway.stop()
+        sys.exit(0)
+
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+
+    gateway.run()
