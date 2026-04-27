@@ -8,7 +8,7 @@
 This repository implements a single-node Slowloris-style tarpit engine (STARS-Sink). The decentralized constellation mesh (STARS-Pulse) and eBPF XDP filter (STARS-Filter) are under active design.
 
 See [RFC.md](docs/RFC.md) for the architectural vision.  
-See also the **[Architectural White Paper (Lexicon v1.2)](Starswarm-AIOS-WhitePaper-v0.1.0-Lexicon.md)** for the complete theoretical framework of Endogenous Autonomy and Fractal Cognition.
+See also the **[Architectural White Paper (Lexicon v0.1.0)](Starswarm-AIOS-WhitePaper-v0.1.0-Lexicon.md)** for the complete theoretical framework of Endogenous Autonomy and Fractal Cognition.
 
 
 ## What is STARS-Gateway?
