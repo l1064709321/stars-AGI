@@ -1,8 +1,9 @@
 # STARS-Gateway v0.1.0
 
 [![Rust](https://img.shields.io/badge/Rust-1.75%2B-orange)](https://www.rust-lang.org)
-[![License](https://img.shields.io/badge/License-Apache%202.0-green)](LICENSE)
+[![License](https://img.shields.io/badge/License-GPL%20v3-blue)](LICENSE)
 [![Stage](https://img.shields.io/badge/Stage-Proof%20of%20Concept-yellow)]()
+
 
 **Current Status: Proof-of-Concept**  
 This repository implements a single-node Slowloris-style tarpit engine (STARS-Sink). The decentralized constellation mesh (STARS-Pulse) and eBPF XDP filter (STARS-Filter) are under active design. See [RFC.md](docs/RFC.md) for the architectural vision.
