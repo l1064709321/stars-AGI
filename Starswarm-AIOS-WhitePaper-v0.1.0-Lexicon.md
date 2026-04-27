@@ -1,6 +1,6 @@
 # 群星 A.I. OS 架构白皮书 
 
-**Star-swarm A.I. OS Architecture White Paper**
+**Star-swarm人工智能操作系统架构白皮书**
 
 **版本**：v0.1.0 (Lexicon Forged)
 **日期**：2026年4月27日
@@ -37,7 +37,7 @@
 
 群星 A.I. OS 采用六层递阶控制模型，外加**萌始驱策层（Primordial Drive Layer）**与**全域势场层**。
 
-text
+文本
 
 ┌─────────────────────────────────────────────────────────────┐
 
@@ -152,4 +152,4 @@ text
 
 本人保留对上述独创术语（包括但不限于：脉势元/PPU、赫布异变、世态模因、萌始驱策、分形识构等）的完整署名权及解释权。
 
-**Copyright 2026 lord of the star**
+**版权所有2026lord of the star**
