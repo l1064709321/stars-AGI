@@ -128,6 +128,9 @@ This project is in early proof-of-concept stage. Bug reports, ideas, and discuss
 
 License
 
-# Apache 2.0. See LICENSE.
+# 项目已以 GNU General Public License v3.0 开源，欢迎技术交流与社区协作。任何对上述架构设计的转载、引用、改编或商业使用，请注明出处并保留本声明。
+本人保留对以上全部原创设计内容的完整署名权及解释权。
+
+**Copyright 2026 lord of the star**
 
 ```
