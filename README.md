@@ -60,8 +60,7 @@ cargo --version
 1. Clone the repository and enter the directory
 
 ```bash
-git clone https://github.com/L1064709321/stars-gateway.git
-cd stars-gateway
+git clone https://github.com/l1064709321/stars-swarm-AGI.git
 git checkout v0.1.0  # ensure using the v0.1.0 tag
 ```
 
