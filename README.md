@@ -63,14 +63,14 @@ During installation, press Enter to select the default options. Immediately afte
 source "$HOME/.cargo/env"
 ```
 
-# Verify installation:
+## Verify installation:
 
 ```bash
 rustc --version
 cargo --version
 ```
 
-# Quick Start
+## Quick Start
 
 1. Clone the repository and enter the directory
 
@@ -91,7 +91,7 @@ cargo build --release
 sudo ./target/release/stars-gateway
 ```
 
-# After successful startup, it will show:
+## After successful startup, it will show:
 
 ```
 [星主] 陷阱引擎已启动，监听端口 9999
@@ -105,19 +105,19 @@ sudo apt-get update
 sudo apt-get install -y slowhttptest
 ```
 
-# Launch the attack:
+## Launch the attack:
 
 ```bash
 slowhttptest -c 500 -H -g -o report -i 10 -r 200 -t GET -u http://127.0.0.1:9999/
 ```
 
-# Things to observe:
+## Things to observe:
 
 *   The attacker client will hang and eventually time out.
 *   The defender `stars-gateway` process CPU usage remains consistently below 5%.
 *   Connections on the trap port stay in ESTABLISHED state (`ss -ntp | grep 9999`).---
 
-# Project Structure
+## Project Structure
 ```
 stars-gateway/
 ├── LICENSE_MIT          # 核心算法思想 (MIT)
@@ -145,4 +145,4 @@ This project is licensed under the **GNU General Public License v3.0**.
 
 All concepts and terminology defined in the **Architectural White Paper (Lexicon v0.1.0)** — including but not limited to **"Endogenous Autonomy"**, **"Fractal Cognition"**, and **"PPU (Pulse-Potential Units)"** — are original intellectual property of the author.
 
-**Copyright 2026 lord of the star**
+# **Copyright 2026 lord of the star**
